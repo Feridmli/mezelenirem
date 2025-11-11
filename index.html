@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KamoAzmiu NFT Marketplace 🐻</title>
+<style>
+/* Mövcud stil saxlanılıb */
+body { margin:0;font-family:'Poppins',sans-serif; background:radial-gradient(circle at top,#0c0c0c,#050505); color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh;}
+.main-card{width:95%;max-width:1200px;background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);border-radius:30px;padding:40px;display:flex;flex-direction:column;align-items:center;}
+.center-card{background:rgba(255,255,255,0.05);backdrop-filter:blur(15px);padding:30px 50px;border-radius:25px;text-align:center;margin-bottom:30px;}
+.center-card h1{font-size:32px;margin-bottom:25px;color:#ffb347;text-shadow:0 0 15px #ff6a00;}
+.wallet-btn{background:linear-gradient(135deg,#ff6a00,#ee0979);color:#fff;padding:12px 25px;border:none;border-radius:50px;cursor:pointer;font-weight:bold;margin:10px;transition:all 0.3s ease;box-shadow:0 4px 15px rgba(238,9,121,0.5);}
+.wallet-btn:hover{transform:scale(1.1);box-shadow:0 8px 25px rgba(238,9,121,0.8);}
+.marketplace{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;width:100%;margin-top:20px;}
+.nft-card{background:rgba(255,255,255,0.05);border-radius:20px;padding:15px;text-align:center;transition:transform 0.3s ease,box-shadow 0.3s ease;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
+.nft-card:hover{transform:translateY(-10px) scale(1.05);box-shadow:0 15px 40px rgba(255,105,0,0.4);}
+.nft-card img{width:120px;height:120px;border-radius:15px;object-fit:cover;transition:transform 0.3s ease;}
+.nft-card img:hover{transform:scale(1.1) rotate(3deg);}
+.nft-card h4{margin:10px 0 5px 0;font-weight:700;color:#ffb347;}
+.nft-card p{margin:0 0 10px 0;color:#fff;opacity:0.8;}
+.nft-card button{background:linear-gradient(135deg,#ff6a00,#ee0979);padding:8px 20px;border:none;border-radius:30px;cursor:pointer;color:#fff;font-weight:bold;transition:all 0.3s ease;}
+.nft-card button:hover{transform:scale(1.1);box-shadow:0 8px 25px rgba(255,105,0,0.7);}
+.pagination{text-align:center;margin:25px 0;}
+.pagination button{background:linear-gradient(135deg,#00ccff,#0055ff);color:#fff;border:none;padding:8px 15px;margin:0 5px;border-radius:50px;cursor:pointer;font-weight:bold;transition:all 0.3s ease;}
+.pagination button:hover:not(:disabled){transform:scale(1.1);box-shadow:0 6px 20px rgba(0,204,255,0.5);}
+.pagination button:disabled{opacity:0.4;cursor:default;}
+</style>
+</head>
+<body>
+<div class="main-card">
+  <div class="center-card">
+    <h1>KamoAzmiu NFT Marketplace 🐻</h1>
+    <button class="wallet-btn" id="connectBtn">Cüzdanı qoş</button>
+    <button class="wallet-btn" id="disconnectBtn" style="display:none;">Bağlantını kəs</button>
+    <span id="addr" style="margin-left:10px; opacity:0.7;"></span>
+  </div>
+
+  <section class="marketplace" id="marketplace"></section>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<!-- ====== CDN-lər (UMD) ====== -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@opensea/seaport-js@latest/dist/seaport.umd.min.js"></script>
+
+<script>
+/* ======= Əsas dəyişənlər ======= */
+const BACKEND_URL = "https://dogru-ud6r.onrender.com";
+const PROXY_ADDRESS = "0x9656448941C76B79A39BC4ad68f6fb9F01181EC7";
+const NFT_CONTRACT_ADDRESS = "0x54a88333F6e7540eA982261301309048aC431eD5";
+const APECHAIN_ID = 33139;
+
+let provider, signer, seaport, userAddress;
+
+const connectBtn = document.getElementById("connectBtn");
+const disconnectBtn = document.getElementById("disconnectBtn");
+const addrSpan = document.getElementById("addr");
+
+/* ======= Şəbəkə dəyişmə ======= */
+async function switchNetwork() {
+  const network = await provider.getNetwork();
+  if (network.chainId !== APECHAIN_ID) {
+    try {
+      await provider.send("wallet_switchEthereumChain", [{ chainId: "0x8163" }]);
+    } catch(err) {
+      if (err.code === 4902) {
+        await provider.send("wallet_addEthereumChain", [{
+          chainId: "0x8163",
+          chainName: "ApeChain Mainnet",
+          nativeCurrency: { name: "APE", symbol: "APE", decimals: 18 },
+          rpcUrls: ["https://rpc.apechain.com"],
+          blockExplorerUrls: ["https://apescan.io"]
+        }]);
+      } else throw err;
+    }
+  }
+}
+
+/* ======= Cüzdan qoşulması ======= */
+async function connectWallet() {
+  try {
+    if (window.ethereum) {
+      provider = new window.ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+    } else {
+      const wcProvider = new window.WalletConnectProvider.default({
+        rpc: { [APECHAIN_ID]: "https://rpc.apechain.com" },
+        chainId: APECHAIN_ID,
+        qrcode: true
+      });
+      await wcProvider.enable();
+      provider = new window.ethers.providers.Web3Provider(wcProvider);
+    }
+
+    signer = provider.getSigner();
+    userAddress = await signer.getAddress();
+    await switchNetwork();
+    seaport = new window.Seaport.Seaport(signer, { contractAddress: PROXY_ADDRESS });
+
+    connectBtn.style.display = "none";
+    disconnectBtn.style.display = "inline-block";
+    addrSpan.textContent = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
+
+    await loadOrders();
+  } catch(err) {
+    console.error("Wallet qoşulma xətası:", err);
+    alert("Cüzdan qoşulmadı! Zəhmət olmasa Metamask və ya WalletConnect yoxlayın.");
+  }
+}
+
+/* ======= Marketplace-dən orderləri yüklə ======= */
+async function loadOrders() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/orders`);
+    const data = await res.json();
+
+    if (!data.success) throw new Error(data.error || "Məlumat tapılmadı");
+
+    const market = document.getElementById("marketplace");
+    market.innerHTML = "";
+
+    data.orders.forEach(order => {
+      const div = document.createElement("div");
+      div.className = "nft-card";
+      div.innerHTML = `
+        <img src="https://ipfs.io/ipfs/QmXExampleNFTImage/${order.tokenid || order.tokenId}.png" alt="NFT">
+        <h4>NFT #${order.tokenid || order.tokenId}</h4>
+        <p>${order.price} APE</p>
+        <button>Al</button>
+      `;
+      market.appendChild(div);
+    });
+  } catch (err) {
+    console.error("Marketplace yüklənmə xətası:", err);
+  }
+}
+
+/* ======= Cüzdan bağlantısını kəs ======= */
+connectBtn.onclick = connectWallet;
+disconnectBtn.onclick = () => {
+  provider = signer = seaport = userAddress = null;
+  connectBtn.style.display = "inline-block";
+  disconnectBtn.style.display = "none";
+  addrSpan.textContent = "";
+  document.getElementById('marketplace').innerHTML = "";
+  document.getElementById('pagination').innerHTML = "";
+};
+</script>
+</body>
+</html>
